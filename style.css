@@ -1,0 +1,134 @@
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+#timeline {
+    width: 100%;
+    height: 100%;            
+}
+
+.dashboard {
+    font: 15px arial;
+    display: grid;
+    grid-template-columns: 25% 20% 35% 20%;
+    grid-template-rows: 20% 20% 42% 18%;
+    grid-template-areas: "title title title title"
+                         "map map toggles toggles"
+                         "map map timeline timeline"
+                         "description description timeline timeline";
+    height: 95%;
+    margin: 2em;
+}
+
+.map {
+    grid-area: map;
+}
+
+.timeline {
+    grid-area: timeline;
+    margin-left: 1em;
+    text-align: center;
+}
+
+.toggles {
+    grid-area: toggles;
+    background-color: #fcf4a3;
+    margin-left: 1em;
+    text-align: center;
+    display: flex;
+}
+
+.toggles-container {
+    margin: auto;
+}
+
+#filters {
+    text-align: center;
+    float: left;
+    margin-left: 2em;
+    margin-right: 2em;
+    margin-bottom: 1em;
+}
+
+#scatter-button {
+    margin-right: 2em; 
+    margin-bottom: 0.5em;
+}
+
+#group-button {
+    margin-bottom: 0.5em;
+}
+
+#year-range-from {
+    width: 7em;
+    margin-right: 0.5em;
+}
+
+#year-range-to {
+    width: 7em;
+    margin-left: 0.5em;
+}
+
+#borough-toggles {
+    float: right;
+    text-align: left;
+    margin: 1.5em;
+    margin-left: 4em;
+}
+
+.clearfix{
+    clear: both;
+}
+
+.description {
+    grid-area: description;
+    background-color: #fcf4a3;
+    text-align: center;
+    font: 15px arial;
+    margin-top: 0.5em;
+}
+
+.content {
+    margin: 1em;
+}
+
+.title {
+    grid-area: title;
+}
+
+#rats {
+    height: 90%;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.empty-box {
+    grid-area: emptybox;
+    background-color: orangered;
+}
+
+.axis path,
+.axis line {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+}
+
+.browser text {
+    text-anchor: start;
+}
+
+div.tooltip {   
+    position: absolute;           
+    text-align: center;           
+    width: 80px;                  
+    height: 60px;                 
+    padding: 2px;             
+    font: 12px arial;        
+    background: rgb(241, 240, 240);   
+    border: 0px;      
+    border-radius: 8px;           
+    pointer-events: none;         
+}

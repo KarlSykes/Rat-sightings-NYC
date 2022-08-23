@@ -1,0 +1,471 @@
+<html>
+<head>
+    <title>Rats!</title>
+  
+    <!-- Using D3 version 3 -->
+    <script src="https://d3js.org/d3.v3.js"></script>
+
+    <!-- Stylesheet required for leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.4.0/dist/leaflet.css"
+        integrity="sha512-puBpdR0798OZvTTbP4A8Ix/l+A4dHDD0DGqYW6RQ+9jxkRFclaxxQb/SJAWZfWAkuyeQUytO7+7N4QKrDh+drA=="
+        crossorigin="" />
+
+    <!-- Leaflet library -->
+    <script src="https://unpkg.com/leaflet@1.4.0/dist/leaflet.js"
+        integrity="sha512-QVftwZFqvtRNi0ZyCtsznlKSWOStnDORoefr1enyq5mVL4tmKB3S/EnC3rRJcxCPavG10IcrVGSmPh6Qw5lwrg=="
+        crossorigin=""></script>
+
+    <!-- Add stylesheet with css -->
+    <link rel="stylesheet" href="style.css">
+</head>
+  
+<div class="dashboard">
+    <!-- Title image -->
+    <div class="title">
+        <img id="rats" src="images/Rats-Title-Image.png">
+    </div>
+
+    <!-- Description blurb -->
+    <div class="description">
+        <div class="content">
+            <p>
+                Visuals about rat sightings from 2010 to 2020 in New York City.
+                This dashboard seeks to provide further insight on the presence of rats in NYC, 
+                over the past decade and across different boroughs.
+                <br/>
+                Note that only 1 in 16 data points are used in the generation of this dashboard. 
+                Data for this visual is sourced from 
+                <a href="https://data.cityofnewyork.us/Social-Services/Rat-Sightings/3q43-55fe">
+                the City of New York</a>.
+            </p>
+        </div>
+    </div>
+    
+    <div class="empty-box"></div>
+
+    <!-- Toggles for the visuals -->
+    <div class="toggles">
+        <div class="toggles-container">
+            <div id="filters">
+                <h4>Filters & Toggles</h4>
+                <br/>
+
+                <!-- Scattering and grouping for the map -->
+                <button id="scatter-button">Scatter</button>    
+                <button id="group-button">Group</button>
+                
+                <!-- Year filtering -->
+                <form>
+                    <input type="number" value="2010" min="2010" max="2020"  id="year-range-from"/> -
+                    <input type="number" value="2020" min="2010" max="2020"  id="year-range-to"/>
+                </form>
+            </div>
+
+            <!-- Borough filtering -->
+            <div id="borough-toggles">
+                <div class="clearfix">
+                    <input type="checkbox" id="bronx-check" class="checks" value="BRONX" checked>
+                    <label for="bronx-check">Bronx</label>
+                    <br/>
+
+                    <input type="checkbox" id="brooklyn-check" class="checks" value="BROOKLYN" checked>
+                    <label for="brooklyn-check">Brooklyn</label>
+                    <br/>
+
+                    <input type="checkbox" id="manhattan-check" class="checks" value="MANHATTAN" checked>
+                    <label for="manhattan-check">Manhattan</label>
+                    <br/>
+
+                    <input type="checkbox" id="staten-check" class="checks" value="STATEN ISLAND" checked>
+                    <label for="staten-check">Staten Island</label>
+                    <br/>
+            
+                    <input type="checkbox" id="queens-check" class="checks" value="QUEENS" checked>
+                    <label for="queens-check">Queens</label>
+                </div>
+            </div>
+            <div class="clearfix"></div>
+        </div>
+    </div>
+
+    <!-- Containers for each visual -->
+    <div class="map" id="map"></div>
+    <div class="timeline" id="timeline"></div>
+
+    <!-- Visualization generation -->
+    <script type="module">
+        'use strict';
+
+        // Add a map to open street view style and set the view to New York City
+        const nyc_coordinates = [40.7, -74];
+        const map = L.map('map').setView(nyc_coordinates, 10);
+
+        var Stamen_TonerLite = L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}{r}.{ext}', {
+            attribution: 'Map tiles by <a href="http://stamen.com">Stamen Design</a>, <a href="http://creativecommons.org/licenses/by/3.0">CC BY 3.0</a> &mdash; Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            subdomains: 'abcd',
+            minZoom: 8,
+            maxZoom: 18,
+            ext: 'png'
+        });
+        Stamen_TonerLite.addTo(map);
+        
+        // Set the dimensions and margins of the graph
+        var margin = {top: 60, right: 230, bottom: 50, left: 50},
+            width = 660 - margin.left - margin.right,
+            height = 400 - margin.top - margin.bottom;
+
+        // Function for applying color to visuals
+        var color = d3.scale.ordinal()
+            .range(["#a6cee3","#b2df8a","#fb9a99","#fdbf6f","#cab2d6"]);
+        
+        // Static mapping of each borough to a specific color
+        let colour = {
+            "BROOKLYN": "#a6cee3",
+            "MANHATTAN": "#b2df8a",
+            "BRONX": "#fb9a99",
+            "QUEENS": "#fdbf6f",
+            "STATEN ISLAND": "#cab2d6"
+        }
+     
+        // Add tooltip placeholder for the timeline
+        var div = d3.select("#timeline")
+            .append("div")   
+            .attr("class", "tooltip")               
+            .style("opacity", 0);
+
+        // Parse the data from file
+        let data = null;
+        d3.csv("data/Rat_Sightings.csv", function(d, i) {
+                // Artificially limit data to 1/16 of the reported sightings
+                // Note that data from 2021 is removed as it is incomplete and skews the visual
+                if (i % 16 == 0 && d.Borough != "Unspecified"
+                        && (new Date(d["Created Date"])).getFullYear() != 2021) {
+
+                    // Strip the time out of the dates and restrict to years
+                    return {
+                        start: new Date(d["Created Date"]).getFullYear(),
+                        borough: d.Borough,
+                        address: d["Incident Address"],
+                        latitude: d.Latitude,
+                        longitude: d.Longitude
+                    };
+                }
+            }, 
+            function(error, rows) {
+                data = rows;
+
+                // Reshape the data to extract the applied filters and nesting
+                reshapeData(rows, [startYearFilter, endYearFilter], boroughsFilter, buildTimeline, buildMap);
+        });
+
+        // Set default filters to be applied
+        let startYearFilter = 2010;
+        let endYearFilter = 2020;
+        let boroughsFilter = ["MANHATTAN", "BRONX", "QUEENS", "BROOKLYN", "STATEN ISLAND"];
+
+        // Selected map grouping to give broad overview first
+        let mapGrouping = "group";
+        
+        // Filter charts by borough
+        const updateBoroughs = (newBoroughs) => {
+            d3.select("#timeline-svg").remove();
+            boroughsFilter = newBoroughs;
+            reshapeData(data, [startYearFilter, endYearFilter], newBoroughs, buildTimeline, buildMap);
+        }
+
+        // Filter charts by year
+        const updateStartYear = (newYear) => {
+            d3.select("#timeline-svg").remove();
+            startYearFilter = newYear;
+            reshapeData(data, [newYear, endYearFilter], boroughsFilter, buildTimeline, buildMap);
+        }
+        const updateEndYear = (newYear) => {
+            d3.select("#timeline-svg").remove();
+            endYearFilter = newYear;
+            reshapeData(data, [startYearFilter, newYear], boroughsFilter, buildTimeline, buildMap);
+        }
+
+
+        var reshapeData = function(data, years, boroughs, buildTimeline, buildMap) {
+            // Filter data by the specified years and boroughs
+            data = data
+                .filter(row => row.start >= years[0] && row.start <= years[1])
+                .filter(row => boroughs.includes(row.borough));
+
+            // Nest the data first by borough then by year
+            var nestedData = d3.nest()
+                .key(function(d) { return d.borough; })
+                .key(function(d) { return d.start; })
+                .rollup(function(d) { return d.length; })
+                .entries(data);
+
+            console.log("Finished parsing data!");
+            buildTimeline(data, nestedData, buildMap);
+        };
+
+        
+        var buildTimeline = function(original, data, buildMap) {
+            // Append the svg object to the timeline div
+            var svg = d3.select("#timeline")
+                .append("svg")
+                    .attr("id", "timeline-svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+            // List of boroughs
+            var keys = d3.map(data, function(d) { return d.key; }).keys();
+
+            // Create the X axis 
+            var x = d3.scale.linear()
+                .domain(d3.extent(original, function(d) { return +d.start; }))
+                .range([ 0, width ]);
+
+            var xAxis = d3.svg.axis()
+                .scale(x)
+                .orient("bottom")
+                .tickFormat(d3.format("d"));
+
+            // Add the X axis to visual and orient ticks
+            svg.append("g")
+                .attr("class", "x axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis)
+                .selectAll("text")  
+                .style("text-anchor", "end")
+                .attr("dx", "2.2em")
+                .attr("dy", ".4em")
+                .attr("transform", "rotate(35)");
+
+            // Add the X axis label
+            svg.append("text")
+                .attr("text-anchor", "end")
+                .attr("x", width)
+                .attr("y", height+45 )
+                .text("Year of Sightings");
+
+            // Create the Y axis
+            var y = d3.scale.linear()
+                .domain([0, 1250])
+                .range([ height, 0 ]);
+
+            var yAxis = d3.svg.axis()
+                .scale(y)
+                .orient("left");
+
+            // Add the Y axis to the visual
+            svg.append("g")
+                .attr("class", "y axis")
+                .call(yAxis);
+
+            // Add the Y axis label
+            svg.append("text")
+                .attr("text-anchor", "end")
+                .attr("x", 0)
+                .attr("y", -20 )
+                .text("Number of Rat Sightings by Borough in New York City")
+                .attr("text-anchor", "start");
+
+            // Map the colors to the boroughs
+            color.domain(keys);
+
+            // Area generator function
+            var area = d3.svg.area()
+                .x(function(d) { return x(d.x); })
+                .y0(function(d) { return y(d.y0); })
+                .y1(function(d) { return y(d.y0 + d.y); });
+
+            // Stack the data to calculate the regions of each borough
+            var stackedData = d3.layout.stack()
+                .values(function(d) { return d.values; })
+                .x(function(d) { return +d.key; })
+                .y(function(d) { return d.values; })
+                (data);
+
+            // Create browser regions to represent the sightings in each of the boroughs
+            var browsers = color.domain().map(function(name) {        
+                var boroughData = stackedData.find(item => item.key == name).values;
+                return {
+                    name: name,
+                    values: boroughData.map(function(d) {
+                        return {
+                            x: +d.key,
+                            y: d.y,
+                            y0: d.y0
+                        };
+                    })
+                };
+            });
+
+            var browser = svg.selectAll(".browser")
+                .data(browsers)
+                .enter().append("g")
+                .attr("class", "browser");
+
+            // Calculate the area of each browser path representing sightings in the borough
+            browser.append("path")
+                .attr("class", "area")
+                .attr("d", function(d) { return area(d.values); })
+                .style("fill", function(d) { return colour[d.name]; })
+                .on("mousemove", function(d) {                 
+                    // Attach the tooltip with the sighting count for the year nearest to the mouse      
+                    var nearestYear = Math.round(x.invert(d3.mouse(d3.event.target)[0]));
+                    var sightings = d.values.find(item => item.x == nearestYear).y;
+                    var message = d.name + "<br/>" + sightings + " sightings<br/>in " + nearestYear;
+
+                    div.transition()        
+                        .duration(200)      
+                        .style("opacity", .8);      
+                    div.html(message)  
+                        .style("left", (d3.event.pageX) + "px")     
+                        .style("top", (d3.event.pageY - 25) + "px")
+                        .style("height", (message.length * 1.5) + "px")
+                        .style("width", (message.length * 2) + "px");     
+                })                  
+                .on("mouseout", function(d) {      
+                    // Remove the tooltip when the mouse moves away from the location 
+                    div.transition()        
+                        .duration(500)      
+                        .style("opacity", 0);   
+                });
+
+            // Create a legend
+            var legend = svg.selectAll(".legend")
+                .data(color.domain()).enter()
+                .append("g")
+                .attr("class","legend")
+                .attr("transform", "translate(" + (width + 20) + "," + 0 + ")");
+
+            // Add color coded boxes to the legend to match the visual coloration for each borough
+            legend.append("rect")
+                .attr("x", 0) 
+                .attr("y", function(d, i) { return 20 * i; })
+                .attr("width", 10)
+                .attr("height", 10)
+                .style("fill", function(d) { return colour[d]; });
+            
+            legend.append("text")
+                .attr("x", 20) 
+                .attr("dy", "0.75em")
+                .attr("y", function(d, i) { return 20 * i; })
+                .text(function(d) { return d; });
+                
+            // Add a legend title
+            legend.append("text")
+                .attr("x",0) 
+                .attr("y",-10)
+                .text("Boroughs of New York City");
+
+            var filterByBorough = function(toggledBorough) {
+                // Update the keys (displayed boroughs) to include when reshaping data
+                let currentBoroughs = keys.slice();
+
+                // Add toggled borough if not present or remove borough otherwise
+                if (!currentBoroughs.includes(toggledBorough)) currentBoroughs.push(toggledBorough);
+                else currentBoroughs = currentBoroughs.filter(e => e !== toggledBorough);
+       
+                // Update the visual
+                updateBoroughs(currentBoroughs);
+            };
+
+            // Add event listeners to each borough filter
+            d3.select("#bronx-check").on("change", function() { filterByBorough("BRONX"); });
+            d3.select("#brooklyn-check").on("change", function() { filterByBorough("BROOKLYN"); });
+            d3.select("#manhattan-check").on("change", function() { filterByBorough("MANHATTAN"); });
+            d3.select("#staten-check").on("change", function() { filterByBorough("STATEN ISLAND"); });
+            d3.select("#queens-check").on("change", function() { filterByBorough("QUEENS"); });
+
+            // Build the map with the original unstacked data
+            console.log("Finished creating timelime!");
+            buildMap(original, mapGrouping);
+        }
+
+        let circlesIndividualRat = [];
+        let circlesBoroughs = [];
+
+        var buildMap = function(data, defaultView) {
+            // Remove old circles from map
+            circlesIndividualRat.forEach(circle => circle.removeFrom(map));
+            circlesBoroughs.forEach(circle => circle.removeFrom(map));
+
+            // Generate circles per rat sighting
+            circlesIndividualRat = data.map(d => {
+                let circle = L.circle([d.latitude, d.longitude], {
+                    color: colour[d.borough],
+                    fillColor: colour[d.borough],
+                    fillOpacity: .5,
+                    radius: 1
+                });
+
+                // Add the tooltip for each circle
+                circle.bindTooltip(`Rat sighting at ${d.address} in ${d.borough}`).openTooltip();
+                return circle;
+            });
+
+            // Count the number of rat sightings per borough
+            const boroughsGroup = d3.nest()
+                .key(d => d.borough)
+                .rollup(leaves => d3.sum(leaves, d => 1))
+                .entries(data);
+
+            // Set the center coordinates for each borough
+            const boroughCentreCoordinates = {
+                "BROOKLYN": [40.661111, -73.948083],
+                "MANHATTAN": [40.779841, -73.967344],
+                "BRONX": [40.860926, -73.876509],
+                "QUEENS": [40.729031, -73.821417],
+                "STATEN ISLAND": [40.580753, -74.150597],
+            };
+
+            // Generate circles summarising rat sightings per borough
+            circlesBoroughs = boroughsGroup.map(d => {
+                const circle = L.circle(boroughCentreCoordinates[d.key], {
+                    color: colour[d.key],
+                    fillColor: colour[d.key],
+                    fillOpacity: .8,
+                    radius: d.values
+                });
+
+                circle.bindTooltip(`${d.key}<br/> Rats spotted: ${d.values}`).openTooltip();
+                return circle;
+            });
+
+            var scatterMap = function() {
+                mapGrouping = "scattered";
+
+                // Remove summed circle from map and add individual rat locations
+                circlesBoroughs.forEach(circle => circle.removeFrom(map));
+                circlesIndividualRat.forEach(circle => circle.addTo(map));
+            };
+
+            var groupMap = function() {
+                mapGrouping = "group";
+
+                // Remove individual rat location from map and add large summed circle
+                circlesIndividualRat.forEach(circle => circle.removeFrom(map));
+                circlesBoroughs.forEach(circle => circle.addTo(map));
+            };
+
+            // Set event listener to display individual locations of rat sightings
+            d3.select("#scatter-button").on("click", () => scatterMap());
+
+            // Set event listener to display total grouped count by borough
+            d3.select("#group-button").on("click", () => groupMap());
+
+            // Add event listener for year selections
+            d3.select("#year-range-from").on("change", function(value) { updateStartYear(event.target.value) });
+            d3.select("#year-range-to").on("change", function(value) { updateEndYear(event.target.value) });
+            
+            // Call the default view
+            switch (defaultView) {
+                case "scattered": scatterMap(); break;
+                case "group": groupMap(); break;
+            }
+            
+            console.log("Finished creating map!");
+        };
+
+    </script>
+</div>
+</html>
